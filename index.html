@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Placement Signal — Know Your Odds</title>
+<meta name="description" content="A LightGBM model trained on 10,000 student records that predicts your campus placement probability based on CGPA, backlogs, skills, and activities.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* ── Design tokens ── */
+  :root {
+    --bg-1: #081e1b;
+    --bg-2: #0f2d28;
+    --bg-3: #163830;
+    --card: #102e28;
+    --card-2: #143530;
+    --card-3: #0d2621;
+    --mint:   #2fdf8f;
+    --mint-2: #1fae70;
+    --mint-3: #0d7a4f;
+    --amber:  #f5a623;
+    --red:    #ef4444;
+    --white:  #f4faf8;
+    --muted:  rgba(244,250,248,.65);
+    --muted2: rgba(244,250,248,.35);
+    --line:   rgba(244,250,248,.1);
+    --line2:  rgba(244,250,248,.06);
+    --shadow: 0 32px 72px rgba(0,0,0,.45);
+    --radius: 20px;
+    --radius-sm: 10px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg-1);
+    color: var(--white);
+    font-family: 'Inter', sans-serif;
+    line-height: 1.65;
+    min-height: 100vh;
+  }
+  h1, h2, h3, h4, .logo-text, .btn, .eyebrow, .kicker {
+    font-family: 'Poppins', sans-serif;
+  }
+  a { color: inherit; text-decoration: none; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 28px; }
+
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg-1); }
+  ::-webkit-scrollbar-thumb { background: var(--mint-3); border-radius: 3px; }
+
+  /* ── Mesh backdrop ── */
+  .mesh { position: absolute; inset: 0; overflow: hidden; z-index: 0; pointer-events: none; }
+  .mesh svg { position: absolute; width: 100%; height: 100%; opacity: .07; }
+
+  /* ── Nav ── */
+  .topbar {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(8,30,27,.82);
+    backdrop-filter: blur(18px);
+    border-bottom: 1px solid var(--line);
+  }
+  .topbar-inner {
+    display: flex; align-items: center; justify-content: space-between;
+    height: 64px;
+  }
+  .logo { display: flex; align-items: center; gap: 12px; }
+  .logo-mark {
+    width: 36px; height: 36px; flex-shrink: 0;
+    background: linear-gradient(135deg, var(--mint), var(--mint-2));
+    clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+    animation: spin-slow 12s linear infinite;
+  }
+  @keyframes spin-slow { to { transform: rotate(360deg); } }
+  .logo-text { font-weight: 700; font-size: 18px; letter-spacing: -.3px; }
+  .logo-tag { font-size: 9px; letter-spacing: 2px; color: var(--muted); text-transform: uppercase; margin-top: 1px; }
+  .nav-links { display: flex; align-items: center; gap: 24px; font-size: 14px; font-weight: 500; color: var(--muted); }
+  .nav-links a:hover { color: var(--white); transition: color .2s; }
+
+  /* ── Buttons ── */
+  .btn {
+    font-weight: 600; font-size: 14px; padding: 11px 26px;
+    border-radius: 100px; display: inline-flex; align-items: center; gap: 8px;
+    cursor: pointer; border: none; transition: all .22s ease;
+  }
+  .btn-solid { background: linear-gradient(135deg, var(--mint), var(--mint-2)); color: #041a12; }
+  .btn-solid:hover { filter: brightness(1.1); transform: translateY(-1px); box-shadow: 0 8px 28px rgba(47,223,143,.25); }
+  .btn-outline { border: 1.5px solid var(--muted2); color: var(--white); background: transparent; }
+  .btn-outline:hover { background: rgba(244,250,248,.06); border-color: rgba(244,250,248,.5); }
+  .btn-lg { font-size: 15.5px; padding: 15px 36px; }
+  .btn-full { width: 100%; justify-content: center; border-radius: 14px; }
+
+  /* ── Hero ── */
+  .hero-wrap { position: relative; overflow: hidden; }
+  .hero { position: relative; z-index: 2; padding: 72px 0 80px; }
+  .hero-inner { max-width: 640px; }
+  .eyebrow {
+    font-size: 11.5px; font-weight: 600; letter-spacing: 2.5px; text-transform: uppercase;
+    color: var(--mint); margin-bottom: 18px;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .eyebrow::before { content: ''; display: block; width: 20px; height: 2px; background: var(--mint); border-radius: 2px; }
+  h1 { font-size: clamp(32px,4.8vw,54px); font-weight: 800; line-height: 1.1; letter-spacing: -.8px; margin-bottom: 22px; }
+  h1 .accent { color: var(--mint); }
+  .hero-sub { font-size: 16.5px; color: var(--muted); max-width: 50ch; margin-bottom: 36px; line-height: 1.7; }
+  .cta-row { display: flex; gap: 14px; flex-wrap: wrap; }
+
+  .hero-badge {
+    position: absolute; right: 0; top: 60px;
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 16px; padding: 20px 24px; display: none; box-shadow: var(--shadow);
+  }
+  @media (min-width: 860px) { .hero-badge { display: block; } }
+  .hero-badge .big { font-size: 36px; font-weight: 800; color: var(--mint); line-height: 1; }
+  .hero-badge .lbl { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+  /* ── Overlap card / SHAP ── */
+  .overlap-card {
+    position: relative; z-index: 3; margin-top: -96px;
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 40px 36px; box-shadow: var(--shadow);
+  }
+  .overlap-head { margin-bottom: 28px; }
+  .kicker { font-size: 11px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; color: var(--mint); margin-bottom: 8px; }
+  .overlap-head h2 { font-size: clamp(20px,2.5vw,26px); font-weight: 700; letter-spacing: -.3px; }
+  .overlap-head p { color: var(--muted); font-size: 14px; margin-top: 8px; }
+
+  .signal-row { display: grid; grid-template-columns: 140px 1fr 64px; align-items: center; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .signal-row:first-of-type { border-top: 1px solid var(--line); }
+  .signal-name { font-size: 13.5px; font-weight: 500; }
+  .signal-track { height: 7px; background: rgba(244,250,248,.08); border-radius: 4px; overflow: hidden; }
+  .signal-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--mint-2), var(--mint)); width: 0; transition: width 1.2s cubic-bezier(.2,.8,.2,1); }
+  .signal-val { font-size: 12px; color: var(--muted); text-align: right; font-weight: 500; }
+
+  /* ── Stats ── */
+  .stats {
+    display: grid; grid-template-columns: repeat(3,1fr);
+    gap: 1px; background: var(--line); border: 1px solid var(--line);
+    border-radius: 18px; overflow: hidden; margin: 60px 0;
+  }
+  @media (max-width: 680px) { .stats { grid-template-columns: 1fr; } }
+  .stat-cell { background: var(--card-2); padding: 28px 28px; }
+  .stat-num { font-size: 32px; font-weight: 800; color: var(--mint); font-family: 'Poppins',sans-serif; letter-spacing: -.5px; }
+  .stat-lbl { font-size: 13px; color: var(--muted); margin-top: 6px; }
+
+  /* ── Sections ── */
+  section { padding: 72px 0; }
+  .section-head { max-width: 600px; margin: 0 0 44px; }
+  .section-head h2 { font-size: clamp(24px,3vw,32px); font-weight: 700; letter-spacing: -.4px; margin-bottom: 12px; }
+  .section-head p { color: var(--muted); font-size: 15.5px; }
+
+  /* ── Card grid ── */
+  .card-grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
+  @media (min-width: 760px) { .card-grid { grid-template-columns: repeat(3,1fr); } }
+  .service-card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 18px; padding: 28px 24px;
+    transition: border-color .2s, transform .2s;
+  }
+  .service-card:hover { border-color: rgba(47,223,143,.3); transform: translateY(-3px); }
+  .service-icon-wrap {
+    width: 46px; height: 46px; border-radius: 12px; margin-bottom: 18px;
+    background: rgba(47,223,143,.12); display: flex; align-items: center; justify-content: center;
+  }
+  .service-icon-wrap svg { width: 22px; height: 22px; color: var(--mint); }
+  .service-card h3 { font-size: 16.5px; font-weight: 600; margin-bottom: 10px; }
+  .service-card p { font-size: 13.5px; color: var(--muted); line-height: 1.68; }
+
+  /* ── Callout ── */
+  .callout {
+    background: var(--card-2); border: 1px solid var(--line); border-left: 3px solid var(--amber);
+    border-radius: var(--radius-sm); padding: 20px 22px;
+    font-size: 14.5px; color: var(--muted); max-width: 720px; line-height: 1.7;
+  }
+  .callout b { color: var(--white); }
+
+  /* ── Calculator section ── */
+  #try {
+    background: linear-gradient(180deg, var(--bg-2) 0%, var(--bg-3) 100%);
+    border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+    padding: 80px 0;
+  }
+  .calc-layout { display: grid; grid-template-columns: 1fr; gap: 40px; align-items: start; }
+  @media (min-width: 960px) { .calc-layout { grid-template-columns: 1fr 420px; gap: 52px; } }
+  .calc-intro h2 { font-size: clamp(26px,3.2vw,36px); font-weight: 700; letter-spacing: -.4px; margin-bottom: 14px; }
+  .calc-intro p { color: var(--muted); font-size: 15.5px; line-height: 1.7; margin-bottom: 20px; }
+
+  .feature-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .feature-list li { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; color: var(--muted); }
+  .feature-list li::before { content: '✓'; color: var(--mint); font-weight: 700; font-size: 13px; margin-top: 1px; flex-shrink: 0; }
+
+  /* ── Form card ── */
+  .form-card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 34px 30px; box-shadow: var(--shadow);
+  }
+  .form-card h3 { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+  .form-card .sub { font-size: 13px; color: var(--muted); margin-bottom: 26px; }
+
+  .form-divider {
+    font-size: 10.5px; font-weight: 600; letter-spacing: 1.8px;
+    text-transform: uppercase; color: var(--muted2); margin: 20px 0 14px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .form-divider::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 580px) { .field-row { grid-template-columns: 1fr; } }
+
+  .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+  .field label { font-size: 12.5px; font-weight: 600; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .field label .hint { font-size: 10.5px; font-weight: 400; color: var(--muted2); background: var(--card-3); border-radius: 4px; padding: 1px 5px; }
+
+  .field input[type="number"] {
+    background: var(--card-3); border: 1.5px solid var(--line);
+    color: var(--white); font-family: 'Inter',sans-serif;
+    font-size: 14px; padding: 11px 14px; border-radius: 10px;
+    outline: none; width: 100%;
+    transition: border-color .18s, box-shadow .18s;
+    -moz-appearance: textfield;
+  }
+  .field input::-webkit-inner-spin-button,
+  .field input::-webkit-outer-spin-button { -webkit-appearance: none; }
+  .field input:focus { border-color: var(--mint); box-shadow: 0 0 0 3px rgba(47,223,143,.12); }
+
+  .toggle-group { display: flex; border-radius: 10px; overflow: hidden; border: 1.5px solid var(--line); }
+  .toggle-group input { display: none; }
+  .toggle-group label {
+    flex: 1; text-align: center; padding: 10px; font-size: 13.5px;
+    font-weight: 500; cursor: pointer; color: var(--muted);
+    transition: background .18s, color .18s; font-family: 'Inter',sans-serif;
+  }
+  .toggle-group input:checked + label {
+    background: linear-gradient(135deg, var(--mint), var(--mint-2));
+    color: #041a12; font-weight: 700;
+  }
+
+  .range-wrapper { display: flex; align-items: center; gap: 12px; }
+  .range-wrapper input[type="range"] {
+    flex: 1; -webkit-appearance: none; appearance: none;
+    height: 6px; border-radius: 3px;
+    background: linear-gradient(90deg, var(--mint) var(--pct, 60%), rgba(244,250,248,.1) var(--pct, 60%));
+    border: none; outline: none; padding: 0;
+  }
+  .range-wrapper input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 18px; height: 18px;
+    border-radius: 50%; background: var(--mint);
+    cursor: pointer; box-shadow: 0 0 0 3px rgba(47,223,143,.2); border: 2px solid #041a12;
+  }
+  .range-val { font-size: 15px; font-weight: 700; color: var(--mint); min-width: 36px; text-align: right; }
+
+  .field-err { font-size: 11.5px; color: var(--red); display: none; }
+  .field.has-error .field-err { display: block; }
+  .field.has-error input { border-color: var(--red); }
+
+  /* ── Result box ── */
+  .result-box {
+    margin-top: 20px; border-radius: 14px; overflow: hidden;
+    border: 1px solid var(--line); display: none;
+    animation: fadeUp .45s ease both;
+  }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .result-box.visible { display: block; }
+  .result-header { padding: 20px 22px; display: flex; align-items: center; gap: 14px; border-bottom: 1px solid var(--line); }
+  .result-verdict { font-size: 16px; font-weight: 700; font-family: 'Poppins',sans-serif; }
+  .result-badge { font-size: 11px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; padding: 4px 10px; border-radius: 100px; }
+  .badge-placed { background: rgba(47,223,143,.15); color: var(--mint); }
+  .badge-notplaced { background: rgba(239,68,68,.15); color: #f87171; }
+  .badge-ineligible { background: rgba(245,166,35,.15); color: var(--amber); }
+  .result-body { padding: 20px 22px; background: var(--card-3); }
+
+  .prob-gauge { margin-bottom: 16px; }
+  .prob-label { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+  .prob-label .val { font-size: 28px; font-weight: 800; color: var(--mint); font-family: 'Poppins',sans-serif; }
+  .prob-label .lbl { font-size: 12px; color: var(--muted); }
+  .prob-track { height: 10px; background: rgba(244,250,248,.08); border-radius: 5px; overflow: hidden; }
+  .prob-fill { height: 100%; border-radius: 5px; width: 0; transition: width 1.4s cubic-bezier(.2,.8,.2,1); }
+  .prob-fill.green { background: linear-gradient(90deg, var(--mint-2), var(--mint)); }
+  .prob-fill.red   { background: linear-gradient(90deg, #b91c1c, #ef4444); }
+
+  .warn-list { margin-top: 12px; display: flex; flex-direction: column; gap: 7px; }
+  .warn-chip {
+    display: flex; align-items: flex-start; gap: 8px;
+    background: rgba(245,166,35,.08); border: 1px solid rgba(245,166,35,.2);
+    border-radius: 8px; padding: 10px 12px; font-size: 12.5px; color: #fbbf24;
+  }
+  .warn-chip .wi { flex-shrink: 0; font-size: 14px; }
+  .ood-notice {
+    margin-top: 10px; padding: 10px 12px;
+    background: rgba(245,166,35,.06); border: 1px solid rgba(245,166,35,.2);
+    border-radius: 8px; font-size: 12.5px; color: #fbbf24;
+  }
+  .ineligible-msg { font-size: 13.5px; color: var(--muted); line-height: 1.7; }
+  .ineligible-msg strong { color: var(--amber); }
+
+  .spinner {
+    width: 20px; height: 20px; border: 2px solid rgba(47,223,143,.3);
+    border-top-color: var(--mint); border-radius: 50%;
+    animation: spin .7s linear infinite; display: none;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .btn.loading .spinner { display: inline-block; }
+  .btn.loading .btn-text { display: none; }
+
+  /* ── Footer ── */
+  footer { border-top: 1px solid var(--line); padding: 28px 0; color: var(--muted); font-size: 12.5px; }
+  .footer-inner { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+
+  /* ── Scroll reveal ── */
+  .reveal { opacity: 0; transform: translateY(18px); transition: opacity .65s ease, transform .65s ease; }
+  .reveal.in { opacity: 1; transform: none; }
+  @media (prefers-reduced-motion: reduce) {
+    .reveal { opacity: 1; transform: none; transition: none; }
+    .signal-fill, .prob-fill { transition: none; }
+    .logo-mark { animation: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── NAV ── -->
+<nav class="topbar">
+  <div class="wrap topbar-inner">
+    <div class="logo">
+      <div class="logo-mark" aria-hidden="true"></div>
+      <div>
+        <div class="logo-text">Placement Signal</div>
+        <div class="logo-tag">Predicting outcomes honestly</div>
+      </div>
+    </div>
+    <div class="nav-links">
+      <a href="#method">Methodology</a>
+      <a href="#try">About Model</a>
+      <a href="#calculator" class="btn btn-solid">Try the model &rarr;</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ── HERO ── -->
+<div class="hero-wrap">
+  <div class="mesh" aria-hidden="true">
+    <svg viewBox="0 0 1200 700" preserveAspectRatio="none">
+      <polygon points="0,0 300,0 150,220" fill="#2fdf8f"/>
+      <polygon points="300,0 600,0 450,260 150,220" fill="#f4faf8"/>
+      <polygon points="600,0 1200,0 1200,180 900,300 450,260" fill="#2fdf8f"/>
+      <polygon points="0,220 150,220 300,420 0,500" fill="#f4faf8"/>
+      <polygon points="900,300 1200,180 1200,500 1000,600 700,500" fill="#f4faf8"/>
+      <polygon points="150,220 450,260 700,500 300,420" fill="#2fdf8f"/>
+      <polygon points="0,500 300,420 700,500 500,700 0,700" fill="#f4faf8"/>
+      <polygon points="700,500 1000,600 800,700 500,700" fill="#2fdf8f"/>
+    </svg>
+  </div>
+
+  <div class="wrap hero">
+    <div class="hero-inner">
+      <p class="eyebrow">Machine Learning &middot; Campus Placement</p>
+      <h1>Know your <span class="accent">odds</span><br>before the interview does.</h1>
+      <p class="hero-sub">
+        A gradient-boosted model trained on 10,000 student records, validated on data
+        it never saw during training &mdash; not just tuned to look good on a slide.
+      </p>
+      <div class="cta-row">
+        <a class="btn btn-solid btn-lg" href="#calculator">Try the model &rarr;</a>
+        <a class="btn btn-outline btn-lg" href="#method">Read the methodology</a>
+      </div>
+    </div>
+
+    <div class="hero-badge" aria-hidden="true">
+      <div class="big">0.991</div>
+      <div class="lbl">ROC-AUC on held-out test set</div>
+    </div>
+  </div>
+
+
+</div>
+
+<!-- ── STATS ── -->
+<div class="wrap">
+  <div class="stats reveal">
+    <div class="stat-cell">
+      <div class="stat-num">0.991</div>
+      <div class="stat-lbl">ROC-AUC, held-out test set</div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-num">94.6%</div>
+      <div class="stat-lbl">Accuracy, held-out test set</div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-num">10,000</div>
+      <div class="stat-lbl">Student records trained on</div>
+    </div>
+  </div>
+
+  <!-- METHODOLOGY -->
+  <section class="reveal" id="method">
+    <div class="section-head">
+      <p class="kicker">How this was built</p>
+      <h2>Three datasets in, before we trusted any of it.</h2>
+      <p>Worth saying plainly &mdash; the first two didn't hold up, and we're only showing this one because it did.</p>
+    </div>
+    <div class="card-grid">
+      <div class="service-card">
+        <div class="service-icon-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+          </svg>
+        </div>
+        <h3>Ruled out a false start</h3>
+        <p>A 100,000-row dataset let a model memorise its training data completely, yet it still couldn't beat 0.55 AUC on unseen students. No real signal &mdash; so we didn't ship it.</p>
+      </div>
+      <div class="service-card">
+        <div class="service-icon-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+        </div>
+        <h3>Found signal, wrong scale</h3>
+        <p>A 215-student dataset showed strong signal (0.94 AUC) but came from one college, one cohort. Too narrow to trust for students outside it.</p>
+      </div>
+      <div class="service-card">
+        <div class="service-icon-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+        </div>
+        <h3>Landed on scale and signal</h3>
+        <p>10,000 engineering students, correlations up to 0.75. Tested four algorithms under cross-validation before picking LightGBM &mdash; it tied for best and trains fastest.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- DISCLAIMER -->
+  <section class="reveal">
+    <div class="section-head">
+      <p class="kicker">Before you rely on this</p>
+      <h2>What this model is, and isn't.</h2>
+    </div>
+    <div class="callout">
+      This estimates odds from patterns in one training set &mdash; it doesn't know your college's recruiters or this year's hiring market.
+      <b>Treat a low estimate as a prompt to work on backlogs and skills first, not as a verdict.</b>
+      A high estimate is reason for cautious optimism, not complacency.
+    </div>
+  </section>
+</div>
+
+<!-- ── CALCULATOR ── -->
+<section id="try">
+  <div class="wrap">
+    <div id="calculator" class="calc-layout reveal">
+
+      <!-- Left: intro -->
+      <div class="calc-intro">
+        <p class="kicker">Interactive predictor</p>
+        <h2>Try it on your own numbers.</h2>
+        <p>
+          Enter your academic profile and activity record. The model applies a two-stage
+          guardrail &mdash; it will flag if your CGPA is below the eligibility cutoff, or if
+          any input falls outside the training distribution.
+        </p>
+        <ul class="feature-list">
+          <li>Eligibility gate at CGPA 6.0 &mdash; no fabricated probabilities</li>
+          <li>Out-of-distribution warnings for extrapolated inputs</li>
+          <li>All 11 model features included</li>
+          <li>Runs the LightGBM backend when available; shows guardrail offline</li>
+        </ul>
+      </div>
+
+      <!-- Right: form -->
+      <div class="form-card">
+        <h3>Your Profile</h3>
+        <p class="sub">All fields required &middot; results appear below the form</p>
+
+        <form id="predict-form" novalidate>
+
+          <div class="form-divider">Academic</div>
+
+          <div class="field-row">
+            <div class="field" id="f-cgpa">
+              <label>CGPA <span class="hint">0 &ndash; 10</span></label>
+              <input type="number" id="cgpa" min="0" max="10" step="0.01" placeholder="e.g. 7.8" required>
+              <span class="field-err">Enter a CGPA between 0 and 10</span>
+            </div>
+            <div class="field" id="f-backlogs">
+              <label>Backlogs <span class="hint">0 &ndash; 20</span></label>
+              <input type="number" id="backlogs" min="0" max="20" step="1" placeholder="e.g. 0" required>
+              <span class="field-err">Enter 0&ndash;20 backlogs</span>
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div class="field" id="f-tenth">
+              <label>10th % <span class="hint">0 &ndash; 100</span></label>
+              <input type="number" id="tenth" min="0" max="100" step="0.1" placeholder="e.g. 78.5" required>
+              <span class="field-err">Enter 0&ndash;100</span>
+            </div>
+            <div class="field" id="f-twelfth">
+              <label>12th % <span class="hint">0 &ndash; 100</span></label>
+              <input type="number" id="twelfth" min="0" max="100" step="0.1" placeholder="e.g. 75.0" required>
+              <span class="field-err">Enter 0&ndash;100</span>
+            </div>
+          </div>
+
+          <div class="form-divider">Skills &amp; Ratings</div>
+
+          <div class="field" id="f-skills">
+            <label>No. of Technical Skills <span class="hint">e.g. Python, SQL, Java&hellip;</span></label>
+            <input type="number" id="skills" min="0" max="15" step="1" placeholder="e.g. 7" required>
+            <span class="field-err">Enter number of skills (0&ndash;15)</span>
+          </div>
+
+          <div class="field" id="f-comm">
+            <label>Communication Skill Rating <span class="hint">1.0 &ndash; 5.0</span></label>
+            <div class="range-wrapper">
+              <input type="range" id="comm-range" min="1.0" max="5.0" step="0.1" value="3.5"
+                     oninput="syncRange(this,'comm-val','comm')" style="--pct:62%">
+              <span class="range-val" id="comm-val">3.5</span>
+            </div>
+            <input type="hidden" id="comm" value="3.5">
+          </div>
+
+          <div class="form-divider">Activities</div>
+
+          <div class="field" id="f-internship">
+            <label>Internship</label>
+            <div class="toggle-group">
+              <input type="radio" id="intern-no"  name="internship" value="0">
+              <label for="intern-no">No internship</label>
+              <input type="radio" id="intern-yes" name="internship" value="1" checked>
+              <label for="intern-yes">Had internship</label>
+            </div>
+          </div>
+
+          <div class="field" id="f-hackathon">
+            <label>Hackathon</label>
+            <div class="toggle-group">
+              <input type="radio" id="hack-no"  name="hackathon" value="0">
+              <label for="hack-no">Not participated</label>
+              <input type="radio" id="hack-yes" name="hackathon" value="1" checked>
+              <label for="hack-yes">Participated</label>
+            </div>
+          </div>
+
+          <div class="form-divider">Projects &amp; Certifications</div>
+
+          <div class="field-row">
+            <div class="field" id="f-mini">
+              <label>Mini Projects <span class="hint">train range 0&ndash;3</span></label>
+              <input type="number" id="mini" min="0" max="10" step="1" placeholder="e.g. 2" required>
+              <span class="field-err">Enter 0&ndash;10</span>
+            </div>
+            <div class="field" id="f-major">
+              <label>Major Projects <span class="hint">train range 0&ndash;2</span></label>
+              <input type="number" id="major" min="0" max="5" step="1" placeholder="e.g. 1" required>
+              <span class="field-err">Enter 0&ndash;5</span>
+            </div>
+          </div>
+
+          <div class="field" id="f-workshops">
+            <label>Workshops / Certifications <span class="hint">train range 0&ndash;3</span></label>
+            <input type="number" id="workshops" min="0" max="10" step="1" placeholder="e.g. 2" required>
+            <span class="field-err">Enter 0&ndash;10</span>
+          </div>
+
+          <button type="submit" class="btn btn-solid btn-full" id="submit-btn" style="margin-top:8px;">
+            <div class="spinner" aria-hidden="true"></div>
+            <span class="btn-text">Predict My Placement Odds &rarr;</span>
+          </button>
+        </form>
+
+        <div class="result-box" id="result-box" role="region" aria-live="polite" aria-label="Prediction result"></div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ── FOOTER ── -->
+<footer>
+  <div class="wrap footer-inner">
+    <span>Placement Signal &mdash; an internal model card, not an official placement guarantee.</span>
+    <span>Trained on 10,000 records &middot; LightGBM &middot; evaluated on held-out data</span>
+  </div>
+</footer>
+
+<script>
+/* ── Scroll reveal ── */
+const io = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      e.target.classList.add('in');
+      e.target.querySelectorAll('.signal-fill').forEach(b => { b.style.width = b.dataset.w + '%'; });
+      io.unobserve(e.target);
+    }
+  });
+}, { threshold: 0.12 });
+document.querySelectorAll('.reveal').forEach(r => io.observe(r));
+
+/* ── Range slider ── */
+function syncRange(el, valId, hiddenId) {
+  const val = parseFloat(el.value);
+  document.getElementById(valId).textContent = val;
+  document.getElementById(hiddenId).value = val;
+  const pct = ((val - parseFloat(el.min)) / (parseFloat(el.max) - parseFloat(el.min))) * 100;
+  el.style.setProperty('--pct', pct + '%');
+}
+
+/* ── Validation ── */
+function v(id) { return document.getElementById(id).value; }
+function setErr(fid, show) {
+  const f = document.getElementById(fid);
+  show ? f.classList.add('has-error') : f.classList.remove('has-error');
+}
+function validateForm() {
+  let ok = true;
+  const checks = [
+    ['f-cgpa',     parseFloat(v('cgpa')),     0,   10],
+    ['f-backlogs', parseInt(v('backlogs')),    0,   20],
+    ['f-tenth',    parseFloat(v('tenth')),     0,  100],
+    ['f-twelfth',  parseFloat(v('twelfth')),   0,  100],
+    ['f-skills',   parseInt(v('skills')),      0,   15],
+    ['f-mini',     parseInt(v('mini')),        0,   10],
+    ['f-major',    parseInt(v('major')),       0,    5],
+    ['f-workshops',parseInt(v('workshops')),   0,   10],
+  ];
+  checks.forEach(([fid, val, lo, hi]) => {
+    if (isNaN(val) || val < lo || val > hi) { setErr(fid, true); ok = false; }
+    else setErr(fid, false);
+  });
+  return ok;
+}
+
+/* ── Guardrail constants (mirror backend) ── */
+const ELIGIBILITY_CUTOFF = 6.0;
+const TRAINING_RANGES = {
+  'CGPA':                    [6.0, 9.5],
+  'backlogs':                [0,   7],
+  'Skills':                  [1,  15],
+  'Communication Skill Rating': [1.0, 5.0],
+  '10th Percentage':         [50,  98],
+  '12th Percentage':         [50,  97],
+  'Mini Projects':           [0,   3],
+  'Major Projects':          [0,   2],
+  'Workshops/Certificatios': [0,   3],
+};
+
+function localGuardrail(payload) {
+  if (payload.cgpa < ELIGIBILITY_CUTOFF) {
+    return {
+      stage: 'not_eligible',
+      message: `Most placement drives set a minimum CGPA around ${ELIGIBILITY_CUTOFF} to be eligible to sit for interviews. A placement-odds estimate isn't the useful number here yet — raising CGPA past your institution's eligibility cutoff is the first step, and clearing backlogs matters far more than any other factor once you're eligible.`,
+    };
+  }
+  const fieldMap = {
+    'CGPA': payload.cgpa, 'backlogs': payload.backlogs,
+    'Skills': payload.skills,
+    'Communication Skill Rating': payload.communication_skill_rating,
+    '10th Percentage': payload.tenth_percentage,
+    '12th Percentage': payload.twelfth_percentage,
+    'Mini Projects': payload.mini_projects,
+    'Major Projects': payload.major_projects,
+    'Workshops/Certificatios': payload.workshops_certifications,
+  };
+  const warnings = [];
+  for (const [col, [lo, hi]] of Object.entries(TRAINING_RANGES)) {
+    const val = fieldMap[col];
+    if (val !== undefined && (val < lo || val > hi)) {
+      warnings.push(`${col} = ${val} is outside the training range (${lo}&#8211;${hi}). Treat this prediction as a rough estimate, not a calibrated one.`);
+    }
+  }
+  return { stage: 'eligible', warnings };
+}
+
+/* ── Render result ── */
+function renderResult(data) {
+  const box = document.getElementById('result-box');
+  box.classList.remove('visible');
+  box.innerHTML = '';
+
+  if (data.stage === 'not_eligible') {
+    box.innerHTML = `
+      <div class="result-header" style="background:rgba(245,166,35,.08);border-bottom:1px solid rgba(245,166,35,.15);">
+        <span class="result-badge badge-ineligible">&#9888; Below Eligibility</span>
+        <span class="result-verdict" style="color:var(--amber)">Not Eligible Yet</span>
+      </div>
+      <div class="result-body"><p class="ineligible-msg">${data.message}</p></div>`;
+  } else if (data.stage === 'predicted') {
+    const pct = data.probability_pct;
+    const placed = data.prediction === 'Placed';
+    const fillClass = placed ? 'green' : 'red';
+    const badge = placed
+      ? '<span class="result-badge badge-placed">&#10003; Likely Placed</span>'
+      : '<span class="result-badge badge-notplaced">&#10007; At Risk</span>';
+    const warnHtml = (data.warnings && data.warnings.length)
+      ? `<div class="warn-list">${data.warnings.map(w=>`<div class="warn-chip"><span class="wi">&#9888;</span><span>${w}</span></div>`).join('')}</div>`
+      : '';
+    const oodHtml = !data.in_distribution
+      ? `<div class="ood-notice">&#9888; One or more inputs fall outside the training distribution. This prediction is extrapolated &#8212; treat it with caution.</div>`
+      : '';
+    box.innerHTML = `
+      <div class="result-header" style="background:${placed?'rgba(47,223,143,.06)':'rgba(239,68,68,.06)'};border-bottom:1px solid var(--line);">
+        ${badge}
+        <span class="result-verdict">${data.prediction}</span>
+      </div>
+      <div class="result-body">
+        <div class="prob-gauge">
+          <div class="prob-label">
+            <span class="val" id="prob-display">0%</span>
+            <span class="lbl">Placement probability</span>
+          </div>
+          <div class="prob-track"><div class="prob-fill ${fillClass}" id="prob-fill"></div></div>
+        </div>
+        ${warnHtml}${oodHtml}
+      </div>`;
+    requestAnimationFrame(() => setTimeout(() => {
+      document.getElementById('prob-fill').style.width = pct + '%';
+      let cur = 0; const step = pct / 60;
+      const t = setInterval(() => {
+        cur = Math.min(cur + step, pct);
+        const el = document.getElementById('prob-display');
+        if (el) el.textContent = cur.toFixed(1) + '%';
+        if (cur >= pct) clearInterval(t);
+      }, 16);
+    }, 50));
+  } else {
+    box.innerHTML = `<div class="result-body" style="color:var(--red)">Error: ${data.error || 'Unknown error'}</div>`;
+  }
+
+  void box.offsetWidth;
+  box.classList.add('visible');
+  setTimeout(() => box.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 80);
+}
+
+/* ── Form submit ── */
+document.getElementById('predict-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  if (!validateForm()) return;
+
+  const btn = document.getElementById('submit-btn');
+  btn.classList.add('loading');
+  btn.disabled = true;
+
+  const payload = {
+    cgpa:                     parseFloat(v('cgpa')),
+    backlogs:                 parseInt(v('backlogs')),
+    tenth_percentage:         parseFloat(v('tenth')),
+    twelfth_percentage:       parseFloat(v('twelfth')),
+    skills:                   parseInt(v('skills')),
+    communication_skill_rating: parseFloat(v('comm')),
+    internship:               parseInt(document.querySelector('input[name="internship"]:checked').value),
+    hackathon:                parseInt(document.querySelector('input[name="hackathon"]:checked').value),
+    mini_projects:            parseInt(v('mini')),
+    major_projects:           parseInt(v('major')),
+    workshops_certifications: parseInt(v('workshops')),
+  };
+
+  try {
+    const resp = await fetch('/predict', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.detail || `HTTP ${resp.status}`);
+    }
+    renderResult(await resp.json());
+  } catch (err) {
+    // Backend offline — run guardrail locally
+    const local = localGuardrail(payload);
+    if (local.stage === 'not_eligible') {
+      renderResult(local);
+    } else {
+      const box = document.getElementById('result-box');
+      const warnHtml = local.warnings.length
+        ? `<div class="warn-list" style="margin-top:12px">${local.warnings.map(w=>`<div class="warn-chip"><span class="wi">&#9888;</span><span>${w}</span></div>`).join('')}</div>`
+        : '';
+      box.innerHTML = `
+        <div class="result-header" style="background:rgba(245,166,35,.06);border-bottom:1px solid var(--line);">
+          <span class="result-badge badge-ineligible">Backend Offline</span>
+        </div>
+        <div class="result-body">
+          <p class="ineligible-msg">
+            <strong>Could not reach the prediction API.</strong><br>
+            Make sure the FastAPI backend is running (<code style="background:var(--card);padding:2px 6px;border-radius:5px">python app.py</code>) then try again.
+            ${warnHtml}
+          </p>
+        </div>`;
+      void box.offsetWidth;
+      box.classList.add('visible');
+    }
+  } finally {
+    btn.classList.remove('loading');
+    btn.disabled = false;
+  }
+});
+
+/* Clear errors on input */
+document.querySelectorAll('#predict-form input[type="number"]').forEach(inp => {
+  inp.addEventListener('input', () => { inp.closest('.field')?.classList.remove('has-error'); });
+});
+</script>
+
+</body>
+</html>
