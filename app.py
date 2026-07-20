@@ -19,6 +19,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+import gradio as gr
 import joblib
 import pandas as pd
 import uvicorn
@@ -207,8 +208,8 @@ async def shap_image():
     return JSONResponse({"error": "shap_summary.png not found"}, status_code=404)
 
 
-@app.get("/")
-async def root():
+@app.get("/app-ui")
+async def ui_root():
     html_path = BASE_DIR / "index.html"
     if html_path.exists():
         return FileResponse(str(html_path), media_type="text/html")
@@ -216,8 +217,19 @@ async def root():
 
 
 # ---------------------------------------------------------------------------
+# Gradio mounting for Hugging Face Spaces compatibility
+# ---------------------------------------------------------------------------
+with gr.Blocks(title="Placement Signal") as demo:
+    gr.HTML("""
+        <iframe src="/app-ui" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; border: none; margin: 0; padding: 0; overflow: hidden; z-index: 999999;"></iframe>
+    """)
+
+app = gr.mount_gradio_app(app, demo, path="/")
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 7860))
-    uvicorn.run("app:app", host="0.0.0.0", port=port, reload=False)
+    uvicorn.run(app, host="0.0.0.0", port=port)

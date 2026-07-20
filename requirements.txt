@@ -6,4 +6,4 @@ pandas
 joblib
 numpy
 python-multipart
-
+gradio
